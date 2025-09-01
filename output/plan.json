@@ -1,0 +1,83 @@
+{
+  "version": "1.0",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "SQL",
+      "label": "Identify Shipments in Last Year and Supplier Linkage",
+      "requires": "",
+      "produces": "result_shipments_in_last_year,sql_query_n1",
+      "input": "Create a Common Table Expression (CTE) named `ShipmentsInLastYear`. Identify all shipments that occurred within the last year (based on `ship_date`). Include `shipment_id`, `order_id` (from `shipments`), `warehouse_id` (from `shipments`), `customer_id` (by joining `shipments` to `orders`), `supplier_id` (by joining `shipment_items` -> `products` -> `purchase_order_items` -> `purchase_orders`), and a flag `is_delayed` (1 if `delivered_date > expected_date`, 0 otherwise). Make sure to handle potential NULLs for `delivered_date` or `expected_date` in the `is_delayed` calculation, considering a shipment delayed only if both dates are present and `delivered_date` is later than `expected_date`."
+    },
+    {
+      "id": "n2",
+      "type": "SQL",
+      "label": "Calculate Supplier Performance Metrics",
+      "requires": "result_shipments_in_last_year",
+      "produces": "result_supplier_performance,sql_query_n2",
+      "input": "From the `ShipmentsInLastYear` CTE (`result_shipments_in_last_year`), create a CTE named `SupplierPerformance`. For each `supplier_id`, calculate: (1) `total_shipments_count` (count of all `shipment_id`s), (2) `delayed_shipments_count` (count of `shipment_id`s where `is_delayed = 1`). Also retrieve `supplier_name` from the `suppliers` table by joining on `supplier_id`. Only include suppliers that have at least one shipment in the last year."
+    },
+    {
+      "id": "n3",
+      "type": "SQL",
+      "label": "Identify Warehouses for Delayed Shipments by Supplier",
+      "requires": "result_shipments_in_last_year",
+      "produces": "result_supplier_delayed_warehouses,sql_query_n3",
+      "input": "From the `ShipmentsInLastYear` CTE (`result_shipments_in_last_year`), create a CTE named `SupplierDelayedWarehouses`. For each `supplier_id`, identify all distinct `warehouse_id`s associated with their delayed shipments (where `is_delayed = 1`). Join with the `warehouses` table to get `warehouse_name`s. The result should list `supplier_id`, `supplier_name`, `warehouse_id`, and `warehouse_name` for each distinct combination where a delayed shipment occurred."
+    },
+    {
+      "id": "n4",
+      "type": "SQL",
+      "label": "Calculate Customer Impact from Delayed Shipments by Supplier",
+      "requires": "result_shipments_in_last_year",
+      "produces": "result_supplier_customer_impact,sql_query_n4",
+      "input": "From the `ShipmentsInLastYear` CTE (`result_shipments_in_last_year`), create a CTE named `SupplierCustomerImpact`. For each `supplier_id` and each `customer_id` associated with their delayed shipments (`is_delayed = 1`), count the number of delayed shipments (`delayed_shipment_count`). Join with the `customers` table to get `customer_name`. The output should include `supplier_id`, `customer_id`, `customer_name`, and `delayed_shipment_count`."
+    },
+    {
+      "id": "n5",
+      "type": "SQL",
+      "label": "Rank and Select Top 3 Affected Customers per Supplier",
+      "requires": "result_supplier_customer_impact",
+      "produces": "result_top_3_customers,sql_query_n5",
+      "input": "From the `SupplierCustomerImpact` CTE (`result_supplier_customer_impact`), for each `supplier_id`, rank customers by their `delayed_shipment_count` in descending order. Select only the top 3 customers for each supplier. This can be done using a window function like `ROW_NUMBER()` or `RANK()` partitioned by `supplier_id` and ordered by `delayed_shipment_count` DESC. The output should include `supplier_id`, `customer_id`, `customer_name`, `delayed_shipment_count`, and the rank."
+    },
+    {
+      "id": "n6",
+      "type": "ANALYZER",
+      "label": "Generate Final Delayed Shipments Report",
+      "requires": "result_supplier_performance,result_supplier_delayed_warehouses,result_top_3_customers",
+      "produces": "final_delayed_shipment_report",
+      "input": "Combine the results from `result_supplier_performance`, `result_supplier_delayed_warehouses`, and `result_top_3_customers`. For each supplier, present: the supplier's name, the total number of delayed shipments, the percentage of delayed shipments (calculated as `delayed_shipments_count / total_shipments_count * 100`), the names of warehouses involved in those delayed shipments (as a comma-separated string), and the names of the top 3 most affected customers along with their respective delayed shipment counts (e.g., 'Customer A (10), Customer B (8), Customer C (5)'). If a supplier has no delayed shipments (`delayed_shipments_count` is 0), they should not appear in the results. Handle cases where a supplier might have fewer than 3 affected customers (only list the ones that exist)."
+    }
+  ],
+  "edges": [
+    [
+      "n1",
+      "n2"
+    ],
+    [
+      "n1",
+      "n3"
+    ],
+    [
+      "n1",
+      "n4"
+    ],
+    [
+      "n4",
+      "n5"
+    ],
+    [
+      "n2",
+      "n6"
+    ],
+    [
+      "n3",
+      "n6"
+    ],
+    [
+      "n5",
+      "n6"
+    ]
+  ]
+}

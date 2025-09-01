@@ -1,0 +1,174 @@
+## **High-Level Context**
+
+This database manages **products, warehouses, suppliers, customers, orders, shipments, stock movements, purchases, and user actions**. It’s structured to support a real-world logistics flow:
+
+1. **Products are stocked in warehouses.**
+2. **Customers place orders.**
+3. Orders get fulfilled from inventory → shipments go out.
+4. **Suppliers send goods** via purchase orders → stock gets restocked.
+5. All movements (inbound/outbound/transfer/adjustments) are tracked with **audits**.
+6. **Users** (staff, managers, drivers) interact with the system, and their actions are logged.
+
+---
+
+## **Core Entities**
+
+### **Warehouses**
+
+* Stores products.
+* Has name, code, location (with optional lat/long), and capacity.
+* Auto-updates timestamps on changes.
+* Represents physical stock locations.
+
+### **Suppliers**
+
+* Companies or vendors providing goods.
+* Contact details + rating.
+* Linked to **purchase orders**.
+
+### **Customers**
+
+* Either `individual` or `business`.
+* Stores contact + location (lat/long available for routing/shipments).
+* Linked to **orders**.
+
+---
+
+## **Products & Inventory**
+
+### **Products**
+
+* Each product has SKU, name, category, weight, volume, unit price.
+* Has a **reorder level** (triggers restocking logic).
+* Core unit of stock across the system.
+
+### **Inventory**
+
+* Links `product` + `warehouse`.
+* Tracks:
+
+  * `quantity` (on hand),
+  * `reserved_qty` (allocated for orders),
+  * `last_updated`.
+* Unique per (warehouse, product).
+* Trigger prevents `reserved_qty` > `quantity`.
+
+---
+
+## **Orders & Fulfillment**
+
+### **Orders**
+
+* Placed by customers.
+* Lifecycle status: `pending → allocated → shipped → delivered` (or `cancelled`).
+* Priority field for urgent handling.
+* Timestamps for order/shipped/delivered.
+
+### **Order Items**
+
+* Each order consists of multiple products.
+* Tracks ordered `quantity`, `unit_price`, and `allocated_qty` (reserved for fulfillment).
+* Trigger prevents allocation beyond ordered quantity.
+
+---
+
+## **Shipments & Tracking**
+
+### **Shipments**
+
+* Tied to both an `order` and a `warehouse`.
+* Tracks carrier, tracking number, and shipment status:
+  (`preparing → in_transit → delivered` or `failed`).
+* Has ship, expected, and delivered dates.
+
+### **Shipment Items**
+
+* Line items inside a shipment.
+* Maps products to quantities shipped.
+
+---
+
+## **Purchases & Restocking**
+
+### **Purchase Orders**
+
+* Created for suppliers → warehouses.
+* Lifecycle: `requested → approved → shipped → received` (or `cancelled`).
+* Dates for order/receipt.
+
+### **Purchase Order Items**
+
+* Products requested from suppliers.
+* Quantity + unit price (procurement details).
+
+---
+
+## **Movements & Audits**
+
+### **Stock Movements**
+
+* Tracks **all product flows** in/out of warehouses:
+
+  * `inbound` (e.g., supplier delivery),
+  * `outbound` (customer order),
+  * `transfer` (between warehouses),
+  * `adjustment` (manual fix).
+* Reference system (order, purchase, shipment, or manual).
+* Keeps notes + timestamp.
+
+### **Inventory Audits**
+
+* Physical vs. system check.
+* Stores discrepancy values.
+* Records auditor + audit date.
+
+---
+
+## **Users & Permissions**
+
+### **Users**
+
+* System users: roles (`admin`, `manager`, `staff`, `driver`).
+* Stores username, password hash, contact info.
+* Created\_at timestamp.
+
+### **User Actions**
+
+* Logs what users do in the system.
+* Stores action type, target table/id, details, timestamp.
+* Keeps a full audit trail.
+
+---
+
+## **Indices & Performance**
+
+* Indexed for efficient lookups:
+
+  * inventory by warehouse/product
+  * orders by customer
+  * order\_items by order/product
+  * shipments by order
+  * stock movements by warehouse/product
+  * products by SKU
+* Supports fast joins and retrievals for core flows.
+
+---
+
+## **Triggers & Constraints**
+
+* **Auto-timestamps**: warehouses, inventory.
+* **Guards**:
+
+  * reserved stock ≤ available stock,
+  * allocated ≤ ordered quantity.
+* These prevent data corruption during stock handling.
+
+---
+
+## **Business Flow Example**
+
+1. **Purchase order** created → supplier ships → stock increases (`inbound` movement).
+2. **Customer order** created → system allocates stock (`reserved_qty`) → shipment created.
+3. Shipment moves to `in_transit` → upon delivery, `outbound` movement recorded.
+4. Inventory audits ensure stock accuracy.
+5. Users’ actions are logged for accountability.

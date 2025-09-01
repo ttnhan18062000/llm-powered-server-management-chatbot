@@ -1,0 +1,10 @@
+SELECT * FROM products LIMIT 10;
+SELECT COUNT() FROM warehouses;
+SELECT * FROM shipments ORDER BY ship_date DESC LIMIT 5;
+SELECT p.name, p.reorder_level, SUM(i.quantity) AS total_quantity FROM products p JOIN inventory i ON p.id = i.product_id GROUP BY p.id HAVING total_quantity < p.reorder_level;
+SELECT * FROM customers WHERE address LIKE '%New York%';
+SELECT role, COUNT() AS user_count FROM users GROUP BY role;
+SELECT * FROM suppliers WHERE address LIKE '%China%';
+SELECT COUNT(*) FROM orders WHERE status = 'pending';
+SELECT * FROM stock_movements ORDER BY timestamp DESC LIMIT 10;
+SELECT SUM(i.quantity * p.unit_price) AS total_inventory_value FROM inventory i JOIN products p ON i.product_id = p.id;
