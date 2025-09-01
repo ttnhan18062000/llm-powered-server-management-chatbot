@@ -17,6 +17,7 @@ from prompts import (
     planner_prompt,
     analyzer_prompt,
     sql_node_prompt,
+    sql_result_analyzer_prompt,
 )
 
 # --- LLM and Chain Setup ---
@@ -47,12 +48,21 @@ class SQLNodeOutput(BaseModel):
     notes: Optional[str] = ""
 
 
+class SQLResultAnalyzerOutput(BaseModel):
+    status: str
+    outputs: str  # JSON string of summaries
+    notes: Optional[str] = ""
+
+
 process_analyzer_chain = process_analyzer_prompt | model.with_structured_output(
     ProcessAnalyzerOutput
 )
 planner_chain = planner_prompt | model.with_structured_output(PlannerOutput)
 analyzer_chain = analyzer_prompt | model.with_structured_output(AnalyzerOutput)
 sql_chain = sql_node_prompt | model.with_structured_output(SQLNodeOutput)
+sql_result_analyzer_chain = sql_result_analyzer_prompt | model.with_structured_output(
+    SQLResultAnalyzerOutput
+)
 
 
 # --- Plan Parsing and Navigation Helpers ---
@@ -203,9 +213,8 @@ def run_node(state: GraphState) -> GraphState:
     state.total_attempts += 1
 
     # Prepare context for the node
-    required_artifacts = {
-        r: state.artifacts.get(r) for r in _csv_to_list(node.get("requires", ""))
-    }
+    required_artifacts_keys = _csv_to_list(node.get("requires", ""))
+    required_artifacts = {r: state.artifacts.get(r) for r in required_artifacts_keys}
 
     payload = {
         "node_id": node_id,
@@ -276,6 +285,54 @@ def run_node(state: GraphState) -> GraphState:
             status.state = "failed"
             status.last_error = exec_result.get("error", "SQL execution failed")
 
+    elif node["type"].upper() == "SQL_RESULT_ANALYZER":
+        # Find the required result and the SQL that produced it
+        result_key = next(
+            (k for k in required_artifacts_keys if k.startswith("result_")), None
+        )
+        if not result_key:
+            status.state = "failed"
+            status.last_error = "SQL_RESULT_ANALYZER requires a 'result_*' artifact, but none was found."
+            state.last_output = {
+                "status": "fail",
+                "error": status.last_error,
+                "artifacts": {},
+            }
+            return state
+
+        sql_query_for_result = "Unknown (query artifact not found)"
+        # Find the query that generated this result by looking at previous artifacts
+        # This is a simple heuristic; a more robust system might link them explicitly in the plan
+        for q in state.executed_queries:
+            # This is not perfect, but good for the prototype
+            if "SELECT" in q.upper():
+                sql_query_for_result = q
+
+        analyzer_payload = {
+            "user_request": state.user_request,
+            "sql_query": sql_query_for_result,
+            "sql_result_json": json.dumps(required_artifacts.get(result_key), indent=2),
+            "input_hints": node.get("input", ""),
+            "produces_csv": node.get("produces", ""),
+        }
+
+        out = sql_result_analyzer_chain.invoke(analyzer_payload)
+        try:
+            artifacts_to_add = json.loads(out.outputs)
+        except json.JSONDecodeError:
+            artifacts_to_add = {}
+
+        state.last_output = {
+            "status": out.status,
+            "artifacts": artifacts_to_add,
+            "notes": out.notes,
+        }
+        if out.status == "ok":
+            status.state = "succeeded"
+        else:
+            status.state = "failed"
+            status.last_error = "Result summarization failed."
+
     else:
         status.state = "failed"
         status.last_error = f"Unknown node type: {node['type']}"
@@ -289,7 +346,6 @@ def run_node(state: GraphState) -> GraphState:
 
 
 def resolve_data(state: GraphState) -> GraphState:
-    """Updates the main artifact blackboard with the output of the last node."""
     node_id = state.current_node_id
     if not node_id:
         return state
@@ -303,14 +359,12 @@ def resolve_data(state: GraphState) -> GraphState:
 
 
 def should_continue(state: GraphState) -> str:
-    """Determines if the graph should continue or end."""
-    if state.total_attempts >= 20:  # Safety break
+    if state.total_attempts >= 20:
         state.issues.append({"reason": "max_attempts_exceeded"})
         return "end"
 
     runnable_nodes = _get_runnable_nodes(state)
     if not runnable_nodes:
-        # Check if all nodes succeeded
         all_succeeded = all(s.state == "succeeded" for s in state.node_status.values())
         if not all_succeeded:
             state.issues.append({"reason": "execution_stalled_due_to_failures"})

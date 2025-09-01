@@ -32,7 +32,7 @@ Return ONLY a valid JSON object with these fields. All values MUST be strings:
 - "nodes": A JSON STRING (a stringified array) of node objects. Each node must have these string fields:
     {{
       "id": "a unique alphanumeric ID",
-      "type": "SQL" or "ANALYZER",
+      "type": "SQL" or "ANALYZER" or "SQL_RESULT_ANALYZER",
       "label": "a short, human-readable description of the node's purpose",
       "requires": "a comma-separated list of artifact IDs this node needs as input, or empty",
       "produces": "a comma-separated list of artifact IDs this node will generate",
@@ -40,10 +40,15 @@ Return ONLY a valid JSON object with these fields. All values MUST be strings:
     }}
 - "edges": A CSV string of 'source_id>destination_id' pairs (e.g., "n1>n2,n2>n3").
 
-Guidelines:
-- **SQL nodes** are for database operations (SELECT, INSERT, UPDATE, DELETE, etc.). Their `produces` field should include at least one `result_*` artifact and optionally a `sql_query` artifact.
-- **ANALYZER nodes** are for reasoning, data transformation, or formulating final answers. They do not execute SQL.
-- The DAG must be logical, connected, and acyclic. Ensure every `requires` artifact is `produces` by a predecessor node.
+**CRITICAL RULE**: The workflow for handling database queries is now STRICTLY controlled.
+1.  A `SQL` node executes a query. It MUST produce a `result_*` artifact (e.g., `result_1`).
+2.  Immediately following any `SQL` node that produces a result, you MUST add a `SQL_RESULT_ANALYZER` node.
+3.  The `SQL_RESULT_ANALYZER` node MUST `require` the `result_*` artifact from the `SQL` node.
+4.  The `SQL_RESULT_ANALYZER` node's job is to interpret the raw data and produce a concise `summary_*` artifact (e.g., `summary_1`).
+5.  All subsequent `ANALYZER` or `SQL` nodes that need to know about the query's outcome MUST `require` the `summary_*` artifact, NOT the raw `result_*` artifact.
+
+**Example Flow**:
+`SQL Node (produces: result_customers)` -> `SQL_RESULT_ANALYZER Node (requires: result_customers, produces: summary_customers)` -> `ANALYZER Node (requires: summary_customers)`
 
 User Request:
 `{user_request}`
@@ -57,7 +62,7 @@ General Context:
 Database Schema:
 `{schema_snapshot}`
 
-Generate the complete DAG plan now.
+Generate the complete DAG plan following these strict rules.
 """
 )
 
@@ -122,6 +127,36 @@ Output Format (a single JSON object):
 {{
   "sql": "<the single, complete SQLite statement with all values embedded>",
   "notes": "<a brief note about the generated SQL>"
+}}
+"""
+)
+
+
+sql_result_analyzer_prompt = ChatPromptTemplate.from_template(
+    """You are a Data Analyst. Your task is to interpret the raw result of a SQL query and provide a concise, useful summary for the next step in a larger process.
+
+Context:
+- Original User Request: {user_request}
+- SQL Query That Was Executed: {sql_query}
+- Raw SQL Result (as a JSON object with 'columns' and 'rows'):
+{sql_result_json}
+
+Your Goal:
+Based on the inputs, generate a clear, natural language summary of the data.
+- If there are rows, describe what they represent. Mention the number of rows.
+- If there are no rows, explicitly state that "The query returned no results."
+- If the result is a single number (e.g., from a COUNT or SUM), state the number and what it means.
+- Keep the summary concise and directly relevant to the original user request.
+
+Instruction for this step: {input_hints}
+
+Artifacts to produce: {produces_csv}
+
+Output Format (a single JSON object):
+{{
+  "status": "ok",
+  "outputs": "<JSON string mapping each produced_artifact_id to its summary value>",
+  "notes": "Summarized the SQL result."
 }}
 """
 )

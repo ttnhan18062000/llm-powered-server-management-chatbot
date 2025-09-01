@@ -44,7 +44,7 @@ def main():
     args = parser.parse_args()
 
     # 1. Setup Database
-    setup_database(args.db, args.schema)
+    # setup_database(args.db, args.schema)
     os.environ["SQLITE_DB_PATH"] = args.db
 
     # 2. Load General Context
