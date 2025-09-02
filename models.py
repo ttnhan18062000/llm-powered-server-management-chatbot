@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
+from pathlib import Path
 
 
 class NodeStatus(BaseModel):
@@ -20,6 +21,7 @@ class GraphState(BaseModel):
     """
 
     # Inputs
+    output_dir: Path
     user_request: str
     general_context: str
     schema_snapshot: str
@@ -34,7 +36,7 @@ class GraphState(BaseModel):
     # A dictionary to store the output artifacts of each node
     artifacts: Dict[str, Any] = Field(default_factory=dict)
 
-    executed_queries: List[str] = Field(default_factory=list)
+    executed_queries: Dict[str, Any] = Field(default_factory=dict)
 
     # Runtime bookkeeping
     node_status: Dict[str, NodeStatus] = Field(default_factory=dict)

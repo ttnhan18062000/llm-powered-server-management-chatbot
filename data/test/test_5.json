@@ -1,0 +1,157 @@
+[
+    {
+        "use_case_id": 39,
+        "description": "Find which products were involved in the most recent inventory audit discrepancy at a specific warehouse.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To quickly review the latest audit results for a warehouse, this query first finds the date of the most recent audit session for that location. It then retrieves all audit records from that specific date, highlighting products with discrepancies.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the most recent audit date for a given warehouse (e.g., warehouse_id = 3).",
+                    "query": "SELECT MAX(audit_date) FROM inventory_audits WHERE warehouse_id = 3;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Retrieve all audit records from that warehouse on that specific date that have a non-zero discrepancy.",
+                    "query": "SELECT p.sku, p.name, ia.system_qty, ia.physical_qty, ia.discrepancy, ia.auditor FROM inventory_audits ia JOIN products p ON ia.product_id = p.id WHERE ia.warehouse_id = 3 AND ia.audit_date = ? AND ia.discrepancy <> 0;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 40,
+        "description": "Calculate the total weight and volume of a pending shipment to assist with logistics planning.",
+        "complexity": "complex",
+        "solution": {
+            "text": "Before a carrier is booked, the logistics team needs to know the physical dimensions and weight of a shipment. This query joins the shipment_items with the products table to access weight and volume data, then multiplies by quantity and sums the totals for a given shipment.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the total weight and volume for a shipment that is currently 'preparing' (e.g., shipment_id = 25).",
+                    "query": "SELECT SUM(p.weight * si.quantity) as total_weight, SUM(p.volume * si.quantity) as total_volume FROM shipment_items si JOIN products p ON si.product_id = p.id WHERE si.shipment_id = 25;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 41,
+        "description": "Get a count of all orders per status type (e.g., pending, shipped, delivered).",
+        "complexity": "simple",
+        "solution": {
+            "text": "This provides a high-level dashboard view of the current state of all orders in the system. It's a simple aggregation that groups all orders by their 'status' field and counts how many fall into each category.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count the number of orders for each status.",
+                    "query": "SELECT status, COUNT(id) as order_count FROM orders GROUP BY status;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 42,
+        "description": "Determine the warehouse capacity utilization based on the volume of all stored goods.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To assess how full each warehouse is, this query first calculates the total volume occupied by all products in each warehouse. It then joins this with the warehouses table to compare the occupied volume against the warehouse's total capacity, yielding a utilization percentage.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the percentage of capacity used in each warehouse.",
+                    "query": "SELECT w.name, w.capacity as total_capacity_volume, SUM(p.volume * i.quantity) as occupied_volume, (SUM(p.volume * i.quantity) * 100.0 / w.capacity) as utilization_percent FROM warehouses w JOIN inventory i ON w.id = i.warehouse_id JOIN products p ON i.product_id = p.id GROUP BY w.id ORDER BY utilization_percent DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 43,
+        "description": "Find all users who have performed a specific, critical action, such as 'INVENTORY_ADJUST', within the last week.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "For auditing and security purposes, it's necessary to track who performs sensitive operations. This query filters the user_actions log for a specific action type within a recent time window and lists the responsible users.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List users who have performed inventory adjustments in the last 7 days.",
+                    "query": "SELECT u.username, u.full_name, ua.action, ua.target_table, ua.target_id, ua.timestamp, ua.details FROM user_actions ua JOIN users u ON ua.user_id = u.id WHERE ua.action = 'INVENTORY_ADJUST' AND ua.timestamp >= date('now', '-7 days') ORDER BY ua.timestamp DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 44,
+        "description": "Check if any received purchase order quantities do not match the inbound stock movements.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "This is a data integrity audit to ensure that when a PO is marked 'received', the corresponding 'inbound' stock movement reflects the correct quantity. It aggregates items from both sources and joins them to find any mismatches, which could indicate a system error or a partial delivery that was logged incorrectly.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find discrepancies between received POs and their corresponding inbound stock movements.",
+                    "query": "SELECT po.id as purchase_order_id, poi.product_id, SUM(poi.quantity) as expected_quantity, SUM(sm.quantity) as received_quantity FROM purchase_orders po JOIN purchase_order_items poi ON po.id = poi.purchase_order_id LEFT JOIN stock_movements sm ON po.id = sm.reference_id AND sm.reference_type = 'purchase' AND sm.product_id = poi.product_id WHERE po.status = 'received' GROUP BY po.id, poi.product_id HAVING expected_quantity <> received_quantity;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 45,
+        "description": "List all products that are currently out of stock (quantity = 0) in every warehouse they are supposed to be in.",
+        "complexity": "complex",
+        "solution": {
+            "text": "This report identifies system-wide stockouts. It groups the inventory records by product and checks if the maximum quantity for that product across all warehouses is zero. This is more accurate than just looking for zero-quantity records, as a product might be out of stock in one warehouse but available in another.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find products whose maximum stock level across all warehouses is 0.",
+                    "query": "SELECT p.sku, p.name, p.reorder_level FROM products p JOIN inventory i ON p.id = i.product_id GROUP BY p.id HAVING MAX(i.quantity) = 0;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 46,
+        "description": "Generate a monthly summary of new customers acquired.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To track business growth, this query aggregates new customer sign-ups by month. It uses date functions to extract the year and month from the `created_at` timestamp and then counts the number of customers created in each period.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count new customers grouped by the month and year they were created.",
+                    "query": "SELECT STRFTIME('%Y-%m', created_at) as signup_month, COUNT(id) as new_customer_count FROM customers GROUP BY signup_month ORDER BY signup_month DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 47,
+        "description": "Find all orders that had a priority level greater than 3 and were not shipped within 24 hours.",
+        "complexity": "complex",
+        "solution": {
+            "text": "This is a service-level agreement (SLA) exception report. It identifies high-priority orders that failed to meet the expedited fulfillment target. The query filters for high-priority orders and then calculates the time difference between the order date and ship date, flagging those that exceed 24 hours.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List high-priority orders where the time to ship was longer than one day.",
+                    "query": "SELECT id as order_id, customer_id, order_date, shipped_date, priority, (JULIANDAY(shipped_date) - JULIANDAY(order_date)) * 24 as hours_to_ship FROM orders WHERE priority > 3 AND shipped_date IS NOT NULL AND hours_to_ship > 24;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 48,
+        "description": "Retrieve the last known location (latitude/longitude) of an 'in_transit' shipment.",
+        "complexity": "simple",
+        "solution": {
+            "text": "While the schema doesn't have a real-time tracking table, we can infer the shipment's origin. This query finds an 'in_transit' shipment and retrieves the location of the warehouse from which it was dispatched, serving as its last known system location.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the originating warehouse coordinates for an 'in_transit' shipment (e.g., tracking_number = 'TRK...').",
+                    "query": "SELECT s.tracking_number, w.name as origin_warehouse, w.latitude, w.longitude FROM shipments s JOIN warehouses w ON s.warehouse_id = w.id WHERE s.status = 'in_transit' AND s.tracking_number = 'TRK00035';"
+                }
+            ]
+        }
+    }
+]

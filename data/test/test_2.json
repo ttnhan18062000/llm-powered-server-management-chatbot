@@ -1,0 +1,162 @@
+[
+    {
+        "use_case_id": 9,
+        "description": "Find the complete order history for a specific customer.",
+        "complexity": "simple",
+        "solution": {
+            "text": "To provide customer service with a user's full history, first, find the customer's ID using a unique identifier like their email address. Then, use this ID to retrieve all associated orders, sorted by the most recent.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the customer ID based on their email address.",
+                    "query": "SELECT id FROM customers WHERE email = 'cust42@mail.com';"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Retrieve all orders placed by that customer, showing the most recent first.",
+                    "query": "SELECT id, status, order_date, shipped_date, delivered_date FROM orders WHERE customer_id = ? ORDER BY order_date DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 10,
+        "description": "Identify products that have never been sold.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To find products that are taking up inventory space without ever being sold, we can perform a LEFT JOIN from the products table to the order_items table. Products that have no corresponding entry in order_items have never been part of any order.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List all products that do not appear in any order_items record.",
+                    "query": "SELECT p.sku, p.name, p.category, p.unit_price FROM products p LEFT JOIN order_items oi ON p.id = oi.product_id WHERE oi.id IS NULL;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 11,
+        "description": "Generate a detailed stock movement ledger for one product in a specific warehouse.",
+        "complexity": "complex",
+        "solution": {
+            "text": "For auditing or tracing purposes, a chronological ledger of all movements for a specific product-warehouse combination is needed. This query retrieves all stock movements, including type, quantity, and reference (like an order or PO number), sorted by time.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Get all stock movements for a product (e.g., id=150) in a warehouse (e.g., id=12), ordered chronologically.",
+                    "query": "SELECT timestamp, movement_type, quantity, reference_type, reference_id, notes FROM stock_movements WHERE product_id = 150 AND warehouse_id = 12 ORDER BY timestamp ASC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 12,
+        "description": "Analyze supplier performance by calculating their average delivery lead time.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To evaluate supplier reliability, we calculate the average time between placing a purchase order and receiving the goods. This query groups all 'received' purchase orders by supplier and computes the average number of days between the order date and the received date.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the average lead time in days for each supplier.",
+                    "query": "SELECT s.name as supplier_name, AVG(JULIANDAY(po.received_date) - JULIANDAY(po.order_date)) as avg_lead_time_days FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id WHERE po.status = 'received' AND po.received_date IS NOT NULL GROUP BY s.name ORDER BY avg_lead_time_days ASC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 13,
+        "description": "Find the top 5 warehouses with the highest outbound shipment volume in the last 30 days.",
+        "complexity": "complex",
+        "solution": {
+            "text": "To identify the busiest distribution centers, this query joins warehouses, shipments, and shipment items. It filters for shipments within the last 30 days, then groups by warehouse and sums the quantity of all items shipped to determine the total volume.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Sum the quantity of all items shipped from each warehouse in the last 30 days and rank them.",
+                    "query": "SELECT w.name as warehouse_name, SUM(si.quantity) as total_units_shipped FROM warehouses w JOIN shipments s ON w.id = s.warehouse_id JOIN shipment_items si ON s.id = si.shipment_id WHERE s.ship_date >= date('now', '-30 days') GROUP BY w.name ORDER BY total_units_shipped DESC LIMIT 5;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 14,
+        "description": "Calculate the average time from order placement to shipment across the entire system.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This is a key performance indicator for internal fulfillment speed. The query filters for all orders that have a status of 'shipped' or 'delivered' and calculates the average time difference between the `order_date` and the `shipped_date`.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the average fulfillment time in hours.",
+                    "query": "SELECT AVG((JULIANDAY(shipped_date) - JULIANDAY(order_date)) * 24) as avg_fulfillment_hours FROM orders WHERE shipped_date IS NOT NULL;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 15,
+        "description": "Identify 'dead stock': products with inventory that have not had any movement in the last year.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "Dead stock ties up capital and warehouse space. This query first finds all inventory items with a quantity greater than zero. It then uses a subquery to filter out any items that have appeared in the stock_movements table within the last 365 days, leaving only the stagnant products.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List products with positive inventory that have no record in stock_movements in the past year.",
+                    "query": "SELECT p.sku, p.name, w.name as warehouse_name, i.quantity FROM inventory i JOIN products p ON i.product_id = p.id JOIN warehouses w ON i.warehouse_id = w.id WHERE i.quantity > 0 AND NOT EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.product_id = i.product_id AND sm.warehouse_id = i.warehouse_id AND sm.timestamp >= date('now', '-365 days'));"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 16,
+        "description": "Get all details for a specific Purchase Order (PO), including its line items.",
+        "complexity": "simple",
+        "solution": {
+            "text": "When reviewing a purchase order, all related information is needed. This involves two queries: one to get the main PO data and supplier name, and a second to list all products, quantities, and prices associated with that PO.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Retrieve the main details for Purchase Order #75.",
+                    "query": "SELECT po.id, s.name as supplier_name, po.status, po.order_date, po.received_date FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id WHERE po.id = 75;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Retrieve all line items for the same Purchase Order.",
+                    "query": "SELECT p.sku, p.name, poi.quantity, poi.unit_price FROM purchase_order_items poi JOIN products p ON poi.product_id = p.id WHERE poi.purchase_order_id = 75;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 17,
+        "description": "Find which products are most frequently included in cancelled orders.",
+        "complexity": "complex",
+        "solution": {
+            "text": "This analysis can highlight problematic products (e.g., stock availability issues, poor descriptions). The query joins orders, order items, and products, filters for only 'cancelled' orders, and then counts how many times each product appears in those orders.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count occurrences of each product in cancelled orders and show the top 10.",
+                    "query": "SELECT p.sku, p.name, COUNT(p.id) as cancellation_count FROM products p JOIN order_items oi ON p.id = oi.product_id JOIN orders o ON oi.order_id = o.id WHERE o.status = 'cancelled' GROUP BY p.id ORDER BY cancellation_count DESC LIMIT 10;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 18,
+        "description": "Check the available-to-promise (ATP) quantity for a product in a specific warehouse.",
+        "complexity": "simple",
+        "solution": {
+            "text": "ATP is a crucial metric for sales and fulfillment, representing the stock that is not already committed to other orders. It is calculated by subtracting the reserved quantity from the total on-hand quantity.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the available quantity for a product (id=210) in a warehouse (id=5).",
+                    "query": "SELECT quantity, reserved_qty, (quantity - reserved_qty) as available_to_promise FROM inventory WHERE product_id = 210 AND warehouse_id = 5;"
+                }
+            ]
+        }
+    }
+]

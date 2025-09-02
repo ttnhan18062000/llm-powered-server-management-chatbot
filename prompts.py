@@ -3,21 +3,47 @@ from langchain.prompts import ChatPromptTemplate
 
 # 1. Prompt to break the request into a high-level textual process
 process_analyzer_prompt = ChatPromptTemplate.from_template(
-    """You are an expert logistics analyst. Your task is to take a user's request and break it down into a sequence of logical steps required to fulfill it using a database.
+    """You are an expert logistics analyst. Your task is to take a user's request and break it down into a sequence of logical, high-level steps required to fulfill it using a database.
 
-Rules:
-1.  Label each step as either `[SQL]` for a database operation or `[ANALYZE]` for a reasoning or data processing step.
-2.  Be specific and clear. The final step should typically be `[ANALYZE]` to formulate the final answer.
-3.  The output MUST be a valid JSON array of strings.
+**Rules:**
+1.  Label each step with **ONE** of the following tags: `[SQL]`, `[SQL_RESULT_ANALYZER]`, or `[ANALYZE]`.
+2.  The flow for querying and interpreting data is now **strict**:
+    - A `[SQL]` step is used to execute a database query that retrieves raw data.
+    - It **MUST** be immediately followed by a `[SQL_RESULT_ANALYZER]` step.
+    - The `[SQL_RESULT_ANALYZER]` step's job is to interpret the raw data from the `[SQL]` step (e.g., "confirm if records were found", "identify the key values from the result").
+    - Subsequent `[ANALYZE]` steps then use the *interpretation* from the `[SQL_RESULT_ANALYZER]`, not the raw data.
+3.  The final step should typically be `[ANALYZE]` to formulate the final answer for the user.
+4.  The output **MUST** be a valid JSON array of strings.
+
+---
+**CONTEXT**
+
+General Context:
+`{general_context}`
+
+Database Schema:
+`{schema_snapshot}`
+
+---
+**EXAMPLE**
+
+**Input:**
+
+User Request:
+`Generate a system-wide report of all products that are below their reorder level in any warehouse, and for each, suggest the most recent supplier.`
+
+**Output:**
+[
+  "[SQL] Query the database to find all products where the stock quantity is below a reorder threshold, joining across products, warehouses, and suppliers to gather all necessary details.",
+  "[SQL_RESULT_ANALYZER] Review the raw query results. If products were found, confirm the list of under-stock products. If no products were found, note that all inventory levels are sufficient.",
+  "[ANALYZE] Format the summarized list of under-stock products into a clear, final report for the user, listing each product, its location, and its most recent supplier."
+]
+
+---
+**REAL INPUT**
 
 User Request:
 {user_request}
-
-General Context:
-{general_context}
-
-Database Schema:
-{schema_snapshot}
 
 Produce the ordered step-by-step process.
 """
@@ -47,20 +73,107 @@ Return ONLY a valid JSON object with these fields. All values MUST be strings:
 4.  The `SQL_RESULT_ANALYZER` node's job is to interpret the raw data and produce a concise `summary_*` artifact (e.g., `summary_1`).
 5.  All subsequent `ANALYZER` or `SQL` nodes that need to know about the query's outcome MUST `require` the `summary_*` artifact, NOT the raw `result_*` artifact.
 
-**Example Flow**:
-`SQL Node (produces: result_customers)` -> `SQL_RESULT_ANALYZER Node (requires: result_customers, produces: summary_customers)` -> `ANALYZER Node (requires: summary_customers)`
-
-User Request:
-`{user_request}`
-
-High-Level Process:
-`{process}`
+---
+**CONTEXT**
 
 General Context:
 `{general_context}`
 
 Database Schema:
 `{schema_snapshot}`
+
+---
+**EXAMPLE**:
+
+**Input**:
+
+User Request:
+`Generate a system-wide report of all products that are below their reorder level in any warehouse, and for each, suggest the most recent supplier.`
+
+High-Level Process:
+`[
+  "[SQL] Query the database to find all products where the stock quantity is below a reorder threshold, joining across products, warehouses, and suppliers to gather all necessary details.",
+  "[SQL_RESULT_ANALYZER] Review the raw query results. If products were found, confirm the list of under-stock products. If no products were found, note that all inventory levels are sufficient.",
+  "[ANALYZE] Format the summarized list of under-stock products into a clear, final report for the user, listing each product, its location, and its most recent supplier."
+]`
+
+**Output**:
+{{
+  "version": "1.0",
+  "nodes": [
+    {{
+      "id": "n1",
+      "type": "SQL",
+      "label": "Retrieve products below reorder level",
+      "requires": "",
+      "produces": "result_below_reorder",
+      "input": "Generate a SQL query to retrieve `product_id`, `product_name`, `warehouse_id`, `warehouse_name`, `current_quantity` (from inventory.quantity), and `reorder_level` (from products.reorder_level) for all products where `inventory.quantity` is less than `products.reorder_level`. Join `products`, `inventory`, and `warehouses` tables."
+    }},
+    {{
+      "id": "n2",
+      "type": "SQL_RESULT_ANALYZER",
+      "label": "Summarize products below reorder level",
+      "requires": "result_below_reorder",
+      "produces": "summary_below_reorder",
+      "input": "Analyze the `result_below_reorder` to identify unique `product_id`s that are below their reorder level in any warehouse, along with their names, the specific warehouse details (id, name), current quantities, and reorder levels. Focus on extracting key information for subsequent steps, specifically the `product_id`s that need supplier information."
+    }},
+    {{
+      "id": "n3",
+      "type": "SQL",
+      "label": "Retrieve most recent supplier for products",
+      "requires": "summary_below_reorder",
+      "produces": "result_recent_suppliers",
+      "input": "Generate a SQL query to find the most recent supplier for each `product_id` present in `summary_below_reorder`. Join `purchase_order_items`, `purchase_orders`, and `suppliers`. Determine recency by `purchase_orders.received_date` (if not NULL) otherwise by `purchase_orders.order_date`. For each `product_id`, select the `supplier_name` and the most recent `received_date` or `order_date`. Ensure only one supplier per product_id is returned, corresponding to the most recent purchase order. Filter results to only include `product_id`s that were identified as being below reorder level."
+    }},
+    {{
+      "id": "n4",
+      "type": "SQL_RESULT_ANALYZER",
+      "label": "Summarize recent suppliers",
+      "requires": "result_recent_suppliers",
+      "produces": "summary_recent_suppliers",
+      "input": "Analyze the `result_recent_suppliers` to extract a clear mapping of `product_id` to its most recent `supplier_name`."
+    }},
+    {{
+      "id": "n5",
+      "type": "ANALYZER",
+      "label": "Generate system-wide reorder report",
+      "requires": "summary_below_reorder,summary_recent_suppliers",
+      "produces": "final_report",
+      "input": "Combine the information from `summary_below_reorder` and `summary_recent_suppliers`. For each product that is below its reorder level in any warehouse, present the product's name, the warehouse name, the current quantity, the reorder level, and the name of its most recent supplier. Format the output as a readable report, potentially a table or a list."
+    }}
+  ],
+  "edges": [
+    [
+      "n1",
+      "n2"
+    ],
+    [
+      "n2",
+      "n3"
+    ],
+    [
+      "n3",
+      "n4"
+    ],
+    [
+      "n2",
+      "n5"
+    ],
+    [
+      "n4",
+      "n5"
+    ]
+  ]
+}}
+
+---
+**REAL INPUT**
+
+User Request:
+`{user_request}`
+
+High-Level Process:
+`{process}`
 
 Generate the complete DAG plan following these strict rules.
 """

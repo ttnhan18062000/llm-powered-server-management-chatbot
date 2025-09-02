@@ -1,0 +1,152 @@
+[
+    {
+        "use_case_id": 29,
+        "description": "Generate a list of 'at-risk' customers who have not placed an order in the last 6 months.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To identify customers who may be churning, this query finds the most recent order date for every customer. It then filters this list to show only those customers whose last order was more than 180 days ago, making them candidates for a re-engagement campaign.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the last order date for each customer and select those who haven't ordered in 6 months.",
+                    "query": "SELECT c.id, c.name, c.email, MAX(o.order_date) as last_order_date FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id HAVING last_order_date <= date('now', '-180 days');"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 30,
+        "description": "Identify products that are frequently purchased together (basic market basket analysis).",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To find product associations, we can self-join the order_items table. This creates pairs of all items that were in the same order. By grouping these pairs and counting them, we can find the most common product combinations, which can inform marketing or product placement strategies.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find pairs of products that appear in the same order and count their occurrences.",
+                    "query": "SELECT p1.name as product_A, p2.name as product_B, COUNT(*) as frequency FROM order_items oi1 JOIN order_items oi2 ON oi1.order_id = oi2.order_id AND oi1.product_id < oi2.product_id JOIN products p1 ON oi1.product_id = p1.id JOIN products p2 ON oi2.product_id = p2.id GROUP BY product_A, product_B ORDER BY frequency DESC LIMIT 10;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 31,
+        "description": "Check for data integrity issues, such as orders that are marked 'shipped' but have no corresponding shipment record.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This is a crucial data validation check. It finds orders that are in a 'shipped' or 'delivered' state but are missing an associated entry in the shipments table, which indicates a potential failure in the fulfillment logging process.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List all orders with a shipped status that do not have a related shipment record.",
+                    "query": "SELECT o.id, o.customer_id, o.order_date FROM orders o LEFT JOIN shipments s ON o.id = s.order_id WHERE o.status IN ('shipped', 'delivered') AND s.id IS NULL;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 32,
+        "description": "Calculate the total value of stock currently reserved for orders but not yet shipped.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This query provides a financial snapshot of capital that is committed but still physically in the warehouse. It joins the inventory and products tables, multiplies the reserved quantity of each item by its unit price, and then sums the total value across all warehouses.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the total monetary value of all reserved inventory.",
+                    "query": "SELECT SUM(i.reserved_qty * p.unit_price) as total_reserved_value FROM inventory i JOIN products p ON i.product_id = p.id;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 33,
+        "description": "Analyze the rate of stock adjustments per product to identify items with potential inventory control issues.",
+        "complexity": "complex",
+        "solution": {
+            "text": "Frequent manual adjustments can signal problems like theft, receiving errors, or product damage. This query filters the stock movements for 'adjustment' types, groups by product, and counts the number of such events over a period, highlighting the most problematic items.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count the number of manual adjustments for each product in the last year.",
+                    "query": "SELECT p.sku, p.name, COUNT(sm.id) as adjustment_count FROM products p JOIN stock_movements sm ON p.id = sm.product_id WHERE sm.movement_type = 'adjustment' AND sm.timestamp >= date('now', '-365 days') GROUP BY p.id ORDER BY adjustment_count DESC LIMIT 10;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 34,
+        "description": "List all business customers and their total number of orders.",
+        "complexity": "simple",
+        "solution": {
+            "text": "This provides a simple report on the activity of B2B clients. It filters the customers table for the 'business' type and then joins with the orders table to count how many orders each has placed.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count the total number of orders for each business customer.",
+                    "query": "SELECT c.name, c.contact_name, COUNT(o.id) as total_orders FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE c.type = 'business' GROUP BY c.id ORDER BY total_orders DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 35,
+        "description": "Forecast inventory demand for next quarter based on sales from the same quarter last year.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "For seasonal planning, this query analyzes historical sales data. It selects all items from orders that were delivered during the same three-month period one year ago, then aggregates the total quantity sold for each product to serve as a baseline for future purchasing.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Sum the quantity of each product sold in Q3 of last year.",
+                    "query": "SELECT p.sku, p.name, SUM(oi.quantity) as last_year_qty FROM products p JOIN order_items oi ON p.id = oi.product_id JOIN orders o ON oi.order_id = o.id WHERE o.status = 'delivered' AND o.order_date BETWEEN date('now', '-1 year', 'start of year', '+6 months') AND date('now', '-1 year', 'start of year', '+9 months') GROUP BY p.id ORDER BY last_year_qty DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 36,
+        "description": "Find all products that have never been put on a purchase order.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This query can identify products that may have been added to the catalog incorrectly or are sourced through non-standard means. It performs a LEFT JOIN from products to purchase_order_items and lists any product that has no corresponding PO record.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List products that have never been purchased from a supplier.",
+                    "query": "SELECT p.sku, p.name, p.created_at FROM products p LEFT JOIN purchase_order_items poi ON p.id = poi.product_id WHERE poi.id IS NULL;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 37,
+        "description": "Generate an end-of-day report of all shipments that were marked 'delivered' today.",
+        "complexity": "simple",
+        "solution": {
+            "text": "This is a standard operational report for daily reconciliation. It filters the shipments table for any record with a status of 'delivered' where the delivery date falls on the current day.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List all shipments delivered today.",
+                    "query": "SELECT s.id, s.order_id, s.carrier, s.tracking_number, c.name as customer_name FROM shipments s JOIN orders o ON s.order_id = o.id JOIN customers c ON o.customer_id = c.id WHERE s.status = 'delivered' AND date(s.delivered_date) = date('now');"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 38,
+        "description": "Identify 'fast-moving' products that have had more than 100 outbound movements in the last month.",
+        "complexity": "complex",
+        "solution": {
+            "text": "To identify high-volume products for warehouse layout optimization (e.g., placing them closer to packing stations), this query analyzes the stock movements table. It filters for 'outbound' movements in the last 30 days, groups by product, and sums the total quantity moved.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Sum the outbound quantity for each product in the last 30 days and filter for high-volume items.",
+                    "query": "SELECT p.sku, p.name, SUM(ABS(sm.quantity)) as total_outbound_qty FROM products p JOIN stock_movements sm ON p.id = sm.product_id WHERE sm.movement_type = 'outbound' AND sm.timestamp >= date('now', '-30 days') GROUP BY p.id HAVING total_outbound_qty > 100 ORDER BY total_outbound_qty DESC;"
+                }
+            ]
+        }
+    }
+]

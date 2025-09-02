@@ -1,0 +1,167 @@
+[
+    {
+        "use_case_id": 19,
+        "description": "Monitor user productivity by identifying the top 10 most active users in the last month based on the number of actions logged.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To gauge user activity, this query joins the users table with their logged actions, filters for actions that occurred in the last 30 days, and then groups by user to count the number of actions. This helps identify power users or staff with high workloads.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Count actions per user in the last 30 days and rank them.",
+                    "query": "SELECT u.username, u.full_name, u.role, COUNT(ua.id) as action_count FROM users u JOIN user_actions ua ON u.id = ua.user_id WHERE ua.timestamp >= date('now', '-30 days') GROUP BY u.id ORDER BY action_count DESC LIMIT 10;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 20,
+        "description": "Calculate the gross profitability of each product.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To estimate profitability, we need to compare a product's average purchase cost with its average selling price. This requires two separate aggregations: one to calculate the average unit cost from all 'received' purchase orders, and another to calculate the average sale price from all 'delivered' orders. These are then joined on the product ID to compute the margin.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate total revenue and average sale price per product from delivered orders.",
+                    "query": "CREATE VIEW ProductSales AS SELECT p.id, p.sku, p.name, SUM(oi.quantity * oi.unit_price) as total_revenue, AVG(oi.unit_price) as avg_sale_price, SUM(oi.quantity) as total_units_sold FROM products p JOIN order_items oi ON p.id = oi.product_id JOIN orders o ON oi.order_id = o.id WHERE o.status = 'delivered' GROUP BY p.id;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Calculate the average purchase cost per product from received purchase orders.",
+                    "query": "CREATE VIEW ProductCosts AS SELECT p.id, AVG(poi.unit_price) as avg_purchase_cost FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.purchase_order_id = po.id WHERE po.status = 'received' GROUP BY p.id;"
+                },
+                {
+                    "step": 3,
+                    "query_description": "Join the sales and cost views to calculate the estimated profit margin per product.",
+                    "query": "SELECT ps.sku, ps.name, ps.total_units_sold, ps.avg_sale_price, pc.avg_purchase_cost, (ps.avg_sale_price - pc.avg_purchase_cost) as estimated_margin_per_unit, (ps.total_revenue - (ps.total_units_sold * pc.avg_purchase_cost)) as estimated_total_profit FROM ProductSales ps JOIN ProductCosts pc ON ps.id = pc.id ORDER BY estimated_total_profit DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 21,
+        "description": "List all products that can be sourced from a specific supplier.",
+        "complexity": "simple",
+        "solution": {
+            "text": "This query identifies all products that have ever been ordered from a particular supplier. It joins multiple tables to link suppliers to products via purchase orders and their items, then selects the distinct products.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find all distinct products ever ordered from a supplier (e.g., supplier_id = 15).",
+                    "query": "SELECT DISTINCT p.sku, p.name FROM products p JOIN purchase_order_items poi ON p.id = poi.product_id JOIN purchase_orders po ON poi.purchase_order_id = po.id WHERE po.supplier_id = 15;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 22,
+        "description": "For a given customer, find the three closest warehouses to their location.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To determine the optimal warehouse for fulfillment, we can calculate the approximate distance between a customer's location and every warehouse. This query uses the Pythagorean theorem on latitude and longitude differences as a proxy for distance, ordering the warehouses from nearest to farthest. (Note: This is a simplified distance calculation and not a true Haversine formula).",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Get the coordinates of the customer.",
+                    "query": "SELECT latitude, longitude FROM customers WHERE id = 123;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Calculate the squared distance from the customer to every warehouse and find the closest three.",
+                    "query": "SELECT id, name, location, SQRT(POW(latitude - ?, 2) + POW(longitude - ?, 2)) as distance_metric FROM warehouses ORDER BY distance_metric ASC LIMIT 3;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 23,
+        "description": "Identify 'stale' orders that have been in 'pending' or 'allocated' status for more than 7 days.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This is an exception report to flag orders that may be stuck and require manual intervention. It filters the orders table for specific statuses and checks if the order date is older than a defined threshold (e.g., 7 days ago).",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find all orders in 'pending' or 'allocated' status that were created over a week ago.",
+                    "query": "SELECT o.id, c.name as customer_name, o.status, o.order_date, o.priority FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status IN ('pending', 'allocated') AND o.order_date <= date('now', '-7 days');"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 24,
+        "description": "Generate a sales report showing total revenue and units sold for each product category.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To get a high-level view of business performance, this query aggregates sales data at the category level. It joins products with their corresponding order items, groups the results by category, and calculates the sum of quantities and total revenue.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate total revenue and units sold, grouped by product category, for delivered orders.",
+                    "query": "SELECT p.category, SUM(oi.quantity) as total_units_sold, SUM(oi.quantity * oi.unit_price) as total_revenue FROM products p JOIN order_items oi ON p.id = oi.product_id JOIN orders o ON oi.order_id = o.id WHERE o.status = 'delivered' GROUP BY p.category ORDER BY total_revenue DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 25,
+        "description": "Analyze carrier reliability by comparing their expected vs. actual delivery dates.",
+        "complexity": "complex",
+        "solution": {
+            "text": "This query assesses carrier performance by calculating the average delay for all completed shipments. It filters for delivered shipments, finds the time difference between the expected and actual delivery dates, and then averages this difference for each carrier.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "For each carrier, calculate the average delivery delay in days.",
+                    "query": "SELECT carrier, COUNT(id) as total_deliveries, AVG(JULIANDAY(delivered_date) - JULIANDAY(expected_date)) as avg_delay_days FROM shipments WHERE status = 'delivered' AND delivered_date IS NOT NULL GROUP BY carrier ORDER BY avg_delay_days ASC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 26,
+        "description": "Get a list of all shipments currently in transit with a specific carrier, along with their destination address.",
+        "complexity": "simple",
+        "solution": {
+            "text": "This is a common operational query for tracking daily logistics. It finds all shipments with an 'in_transit' status for a given carrier and joins with the orders and customers tables to display the final destination address for each shipment.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "List all 'in_transit' shipments for 'UPS' and show the customer's delivery address.",
+                    "query": "SELECT s.id, s.tracking_number, s.expected_date, c.name, c.address FROM shipments s JOIN orders o ON s.order_id = o.id JOIN customers c ON o.customer_id = c.id WHERE s.status = 'in_transit' AND s.carrier = 'UPS';"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 27,
+        "description": "Determine the total value of goods purchased from each supplier in the last year.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This query helps in supplier relationship management and financial planning by quantifying the business given to each supplier. It joins suppliers with their purchase orders and items, filters for received orders within the last year, and sums the total value of the items.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the total purchase value per supplier over the last 365 days.",
+                    "query": "SELECT s.name, SUM(poi.quantity * poi.unit_price) as total_purchase_value FROM suppliers s JOIN purchase_orders po ON s.id = po.supplier_id JOIN purchase_order_items poi ON po.id = poi.purchase_order_id WHERE po.status = 'received' AND po.order_date >= date('now', '-365 days') GROUP BY s.name ORDER BY total_purchase_value DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 28,
+        "description": "Identify warehouses with the highest inventory discrepancy rates to prioritize process improvements.",
+        "complexity": "complex",
+        "solution": {
+            "text": "To find problematic warehouses, we need to compare the magnitude of inventory discrepancies relative to the total inventory count. This query aggregates audit data to sum the absolute value of all discrepancies and the total system quantity checked, then calculates a discrepancy rate for each warehouse.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate the total discrepancy and a discrepancy rate for each warehouse.",
+                    "query": "SELECT w.name, SUM(ia.system_qty) as total_audited_units, SUM(ABS(ia.discrepancy)) as total_discrepancy_units, (SUM(ABS(ia.discrepancy)) * 100.0 / SUM(ia.system_qty)) as discrepancy_rate_percent FROM inventory_audits ia JOIN warehouses w ON ia.warehouse_id = w.id GROUP BY w.name ORDER BY discrepancy_rate_percent DESC;"
+                }
+            ]
+        }
+    }
+]

@@ -1,0 +1,147 @@
+[
+    {
+        "use_case_id": 1,
+        "description": "Generate a system-wide report of all products that are below their reorder level in any warehouse, and for each, suggest the most recent supplier.",
+        "complexity": "complex",
+        "solution": {
+            "text": "First, query the inventory to find all products across all warehouses where the on-hand quantity is below the product's defined reorder level. Then, for each of these low-stock products, find the supplier from the most recent 'received' purchase order to provide a suggestion for restocking. This requires multiple lookups per low-stock item.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find all products in any warehouse that are below their reorder level.",
+                    "query": "SELECT p.id as product_id, p.name as product_name, w.id as warehouse_id, w.name as warehouse_name, i.quantity, p.reorder_level FROM products p JOIN inventory i ON p.id = i.product_id JOIN warehouses w ON i.warehouse_id = w.id WHERE i.quantity < p.reorder_level;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "For a given low-stock product, find the ID of the supplier from the most recent 'received' purchase order.",
+                    "query": "SELECT po.supplier_id FROM purchase_orders po JOIN purchase_order_items poi ON po.id = poi.purchase_order_id WHERE poi.product_id = ? AND po.status = 'received' ORDER BY po.received_date DESC LIMIT 1;"
+                },
+                {
+                    "step": 3,
+                    "query_description": "Retrieve the name of the supplier found in the previous step.",
+                    "query": "SELECT name FROM suppliers WHERE id = ?;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 2,
+        "description": "Get the current inventory level for a specific product across all warehouses.",
+        "complexity": "simple",
+        "solution": {
+            "text": "To find where a specific product is stocked, join the products table with the inventory and warehouses tables. This will list each warehouse that has the product and its current quantity.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Retrieve the inventory quantity and warehouse location for a product with a given SKU.",
+                    "query": "SELECT p.sku, p.name, w.name as warehouse_name, i.quantity, i.reserved_qty FROM products p JOIN inventory i ON p.id = i.product_id JOIN warehouses w ON i.warehouse_id = w.id WHERE p.sku = 'SKU202401337';"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 3,
+        "description": "Calculate the total inventory value for a specific warehouse.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "To determine the total value of assets in a warehouse, you must join the inventory table with the products table. Then, for each item, multiply its on-hand quantity by its unit price and sum the results for all products within that warehouse.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Sum the value of all inventory in a given warehouse (e.g., warehouse_id = 5).",
+                    "query": "SELECT w.name, SUM(i.quantity * p.unit_price) as total_inventory_value FROM inventory i JOIN products p ON i.product_id = p.id JOIN warehouses w ON i.warehouse_id = w.id WHERE i.warehouse_id = 5 GROUP BY w.name;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 4,
+        "description": "Track a shipment and its contents using an order ID.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "First, find the shipment details using the order ID. Then, retrieve all items associated with that shipment by joining the shipment_items and products tables to get a full manifest.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the main shipment details for a given order ID.",
+                    "query": "SELECT id, carrier, tracking_number, status, ship_date, expected_date FROM shipments WHERE order_id = 100;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "List all products included in that shipment, using the shipment ID from the previous step.",
+                    "query": "SELECT p.sku, p.name, si.quantity FROM shipment_items si JOIN products p ON si.product_id = p.id WHERE si.shipment_id = ?;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 5,
+        "description": "Identify the top 10 customers by total spending on delivered orders.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "This query calculates the lifetime value of customers by joining customers, orders, and order_items. It filters for 'delivered' orders to ensure only completed sales are counted, then groups by customer and sums the value of each order item (quantity * price). Finally, it orders the results to find the top spenders.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Join across customers, orders, and order_items to calculate total spending and rank them.",
+                    "query": "SELECT c.id, c.name, SUM(oi.quantity * oi.unit_price) as total_spent FROM customers c JOIN orders o ON c.id = o.customer_id JOIN order_items oi ON o.id = oi.order_id WHERE o.status = 'delivered' GROUP BY c.id, c.name ORDER BY total_spent DESC LIMIT 10;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 6,
+        "description": "Find a warehouse that can fulfill an entire pending order.",
+        "complexity": "complex",
+        "solution": {
+            "text": "This is a multi-step process. First, identify all items and required quantities for the specified order. Then, for each item, find warehouses with enough available stock (quantity - reserved_qty). Finally, intersect these results to find a warehouse that has sufficient stock for ALL items in the order.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Get the list of products and quantities for a specific pending order (e.g., order_id = 15).",
+                    "query": "SELECT product_id, quantity FROM order_items WHERE order_id = 15;"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Find warehouses that have sufficient available stock for all items in the order. This query counts how many items from the order each warehouse can fulfill and matches it against the total number of unique items in the order.",
+                    "query": "SELECT i.warehouse_id FROM inventory i JOIN order_items oi ON i.product_id = oi.product_id WHERE oi.order_id = 15 AND (i.quantity - i.reserved_qty) >= oi.quantity GROUP BY i.warehouse_id HAVING COUNT(DISTINCT i.product_id) = (SELECT COUNT(*) FROM order_items WHERE order_id = 15);"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 7,
+        "description": "Generate a sales velocity report for all products over the last 90 days.",
+        "complexity": "intensive",
+        "solution": {
+            "text": "To analyze sales velocity, we need to sum the quantities of each product from all shipments that were sent within a specific time frame. This involves joining products with shipment items and shipments, filtering by date, grouping by product, and summing the quantities. A LEFT JOIN ensures all products are included, even those with zero sales in the period.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Calculate total units shipped per product in the last 90 days.",
+                    "query": "SELECT p.id, p.sku, p.name, SUM(CASE WHEN s.ship_date >= date('now', '-90 days') THEN si.quantity ELSE 0 END) as units_sold_90_days FROM products p LEFT JOIN shipment_items si ON p.id = si.product_id LEFT JOIN shipments s ON si.shipment_id = s.id GROUP BY p.id, p.sku, p.name ORDER BY units_sold_90_days DESC;"
+                }
+            ]
+        }
+    },
+    {
+        "use_case_id": 8,
+        "description": "Audit inventory discrepancies for a specific product.",
+        "complexity": "moderate",
+        "solution": {
+            "text": "This involves retrieving the history of physical inventory counts for a single product to track how its discrepancy (difference between system and physical count) has changed over time. This helps identify trends in loss or inaccuracy.",
+            "queries": [
+                {
+                    "step": 1,
+                    "query_description": "Find the product ID for a given SKU.",
+                    "query": "SELECT id FROM products WHERE sku = 'SKU202400055';"
+                },
+                {
+                    "step": 2,
+                    "query_description": "Retrieve all audit records for that product, showing the history of discrepancies.",
+                    "query": "SELECT w.name as warehouse_name, audit_date, system_qty, physical_qty, discrepancy, auditor FROM inventory_audits ia JOIN warehouses w ON ia.warehouse_id = w.id WHERE ia.product_id = ? ORDER BY ia.audit_date DESC;"
+                }
+            ]
+        }
+    }
+]

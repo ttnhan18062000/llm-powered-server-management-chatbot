@@ -1,5 +1,0 @@
-[
-  "[SQL] Retrieve the user ID for the specified username from the 'users' table.",
-  "[SQL] Query the 'user_actions' table to find actions performed by the user where the 'target_table' is 'orders' and join with the 'orders' table to filter for orders with 'status' = 'cancelled'. Also, query 'user_actions' where 'target_table' is 'stock_movements' and join with the 'stock_movements' table to filter for 'movement_type' = 'adjustment'. Combine these results to get all high-impact actions.",
-  "[ANALYZE] Consolidate and present the details of the identified order cancellations and manual stock adjustments, including timestamps, affected order/product/warehouse information, and the nature of the change, to provide a clear audit of the user's high-impact actions."
-]

@@ -29,37 +29,37 @@ def setup_database(db_path: str, schema_path: str):
         sys.exit(1)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run a text-to-SQL workflow using LangGraph."
-    )
-    parser.add_argument("--db", required=True, help="Path to the SQLite database file.")
-    parser.add_argument(
-        "--schema", required=True, help="Path to the SQL schema file (DDL)."
-    )
-    parser.add_argument(
-        "--request",
-        help="The natural language request. Reads from stdin if not provided.",
-    )
-    args = parser.parse_args()
-
+def run(
+    db: str,
+    schema: str,
+    request: str,
+    id: str = None,
+    description: str = None,
+    examples: str = None,
+):
     # 1. Setup Database
     # setup_database(args.db, args.schema)
-    os.environ["SQLITE_DB_PATH"] = args.db
+    os.environ["SQLITE_DB_PATH"] = db
 
     # 2. Load General Context
-    with open("data/descriptions.txt", "r") as f:
-        general_context = f.read()
+    if description:
+        with open(description, "r") as f:
+            general_context = f.read()
+    else:
+        general_context = ""
 
     # 3. Load Schema for LLM Context
-    with open(args.schema, "r") as f:
+    with open(schema, "r") as f:
         schema_text = f.read()
 
-    with open("data/examples.sql", "r") as f:
-        example_queries = f.read()
+    if examples:
+        with open(examples, "r") as f:
+            example_queries = f.read()
+    else:
+        example_queries = ""
 
     # 4. Get User Request
-    user_request = args.request
+    user_request = request
     if not user_request:
         print("Please enter your request (press Ctrl+D when done):")
         user_request = sys.stdin.read().strip()
@@ -73,7 +73,7 @@ def main():
 
     # 4. Run the Workflow
     final_state = run_workflow(
-        user_request, general_context, schema_text, example_queries
+        user_request, general_context, schema_text, example_queries, id=id
     )
 
     # 5. Print Summary
@@ -103,7 +103,36 @@ def main():
             print(json.dumps(value, indent=2))
 
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run a text-to-SQL workflow using LangGraph."
+    )
+    parser.add_argument("--id", required=False, help="ID of the execution")
+    parser.add_argument("--db", required=True, help="Path to the SQLite database file.")
+    parser.add_argument(
+        "--description", required=False, help="General description of the database"
+    )
+    parser.add_argument(
+        "--schema", required=True, help="Path to the SQL schema file (DDL)."
+    )
+    parser.add_argument("--examples", required=True, help="Some example queries")
+    parser.add_argument(
+        "--request",
+        help="The natural language request. Reads from stdin if not provided.",
+    )
+    args = parser.parse_args()
+
+    run(
+        db=args.db,
+        schema=args.schema,
+        request=args.request,
+        id=args.id,
+        description=args.description,
+        examples=args.examples,
+    )
+
+
 if __name__ == "__main__":
     main()
 
-# python run.py --db data/logistics.db --schema data/db.sql --request "Audit a specific user's recent actions, such as order cancellations or manual stock adjustments, to review high-impact changes."
+# python run.py --id test3 --db data/logistics_enhanced.db --schema data/db.sql --description data/description.txt --examples data/examples.sql  --request "Find the complete order history for a specific customer."

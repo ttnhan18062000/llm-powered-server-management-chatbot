@@ -160,7 +160,8 @@ def process_analyzer(state: GraphState) -> GraphState:
         }
     )
     state.process = out.process
-    with open("output/process.json", "w") as f:
+    process_output_path = state.output_dir / "process.json"
+    with process_output_path.open("w", encoding="utf-8") as f:
         json.dump(state.process, f, indent=2)
     return state
 
@@ -187,7 +188,9 @@ def planner(state: GraphState) -> GraphState:
     }
     for node in nodes:
         state.node_status[node["id"]] = NodeStatus()
-    with open("output/plan.json", "w") as f:
+
+    plan_output_path = state.output_dir / "plan.json"
+    with plan_output_path.open("w", encoding="utf-8") as f:
         json.dump(state.plan, f, indent=2)
     return state
 
@@ -233,6 +236,8 @@ def run_node(state: GraphState) -> GraphState:
         except json.JSONDecodeError:
             artifacts_to_add = {}
 
+        # artifacts_to_add.update({"node_id": node_id})
+
         state.last_output = {
             "status": out.status,
             "artifacts": artifacts_to_add,
@@ -249,7 +254,7 @@ def run_node(state: GraphState) -> GraphState:
         payload.update({"example_queries": state.example_queries})
         out = sql_chain.invoke(payload)
 
-        state.executed_queries.append(out.sql)
+        state.executed_queries[node_id] = out.sql
 
         exec_result = _exec_sqlite(out.sql, db_path)
 
@@ -270,6 +275,8 @@ def run_node(state: GraphState) -> GraphState:
             and exec_result.get("result")
         ):
             artifacts_to_add[result_artifact_key] = exec_result["result"]
+
+        artifacts_to_add["node_id"] = node_id
 
         state.last_output = {
             "status": exec_result["status"],
@@ -299,13 +306,15 @@ def run_node(state: GraphState) -> GraphState:
             }
             return state
 
-        sql_query_for_result = "Unknown (query artifact not found)"
+        sql_query_for_result = {}
         # Find the query that generated this result by looking at previous artifacts
         # This is a simple heuristic; a more robust system might link them explicitly in the plan
-        for q in state.executed_queries:
-            # This is not perfect, but good for the prototype
-            if "SELECT" in q.upper():
-                sql_query_for_result = q
+        for artifact_key, artifact_value in required_artifacts.items():
+            print(artifact_key)
+            print(artifact_value)
+            sql_query_for_result[artifact_key] = state.executed_queries[
+                artifact_value["node_id"]
+            ]
 
         analyzer_payload = {
             "user_request": state.user_request,
@@ -320,6 +329,8 @@ def run_node(state: GraphState) -> GraphState:
             artifacts_to_add = json.loads(out.outputs)
         except json.JSONDecodeError:
             artifacts_to_add = {}
+
+        # artifacts_to_add.update({"node_id": node_id})
 
         state.last_output = {
             "status": out.status,

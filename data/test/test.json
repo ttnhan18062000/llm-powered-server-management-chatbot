@@ -1,0 +1,287 @@
+{
+    "process": [
+        "[SQL] Retrieve all products from the 'products' table that do not have a corresponding entry in the 'order_items' table, indicating they have never been sold.",
+        "[SQL_RESULT_ANALYZER] Examine the SQL query results to identify if any products were returned. If products are present, extract their names and SKUs. If the result set is empty, confirm that all products have at least one sale record.",
+        "[ANALYZE] Compile a list of all products that have never been sold based on the analyzed results, and present this list clearly to the user."
+    ],
+    "plan": {
+        "version": "1.0",
+        "nodes": [
+            {
+                "id": "n1",
+                "type": "SQL",
+                "label": "Retrieve products that have never been sold",
+                "requires": "",
+                "produces": "result_never_sold",
+                "input": "Generate a SQL query to select `id`, `name`, and `sku` from the `products` table for all products that do not have any corresponding entries in the `order_items` table. This means finding products whose `id` is NOT IN the `product_id` column of `order_items`."
+            },
+            {
+                "id": "n2",
+                "type": "SQL_RESULT_ANALYZER",
+                "label": "Summarize products that have never been sold",
+                "requires": "result_never_sold",
+                "produces": "summary_never_sold",
+                "input": "Examine `result_never_sold`. If the result set is not empty, extract a list of product names and SKUs. If the result set is empty, generate a message indicating that all products have been sold at least once."
+            },
+            {
+                "id": "n3",
+                "type": "ANALYZER",
+                "label": "Generate report of never-sold products",
+                "requires": "summary_never_sold",
+                "produces": "final_report_never_sold",
+                "input": "Based on `summary_never_sold`, compile a clear and concise report for the user. If products were found, list their names and SKUs. If no products were found, state that all products have been sold."
+            }
+        ],
+        "edges": [
+            [
+                "n1",
+                "n2"
+            ],
+            [
+                "n2",
+                "n3"
+            ]
+        ]
+    },
+    "artifacts": {
+        "result_never_sold": {
+            "columns": [
+                "id",
+                "name",
+                "sku"
+            ],
+            "rows": [
+                [
+                    2,
+                    "Product 2",
+                    "SKU00002"
+                ],
+                [
+                    9,
+                    "Product 9",
+                    "SKU00009"
+                ],
+                [
+                    10,
+                    "Product 10",
+                    "SKU00010"
+                ],
+                [
+                    11,
+                    "Product 11",
+                    "SKU00011"
+                ],
+                [
+                    12,
+                    "Product 12",
+                    "SKU00012"
+                ],
+                [
+                    21,
+                    "Product 21",
+                    "SKU00021"
+                ],
+                [
+                    41,
+                    "Product 41",
+                    "SKU00041"
+                ],
+                [
+                    60,
+                    "Product 60",
+                    "SKU00060"
+                ],
+                [
+                    61,
+                    "Product 61",
+                    "SKU00061"
+                ],
+                [
+                    62,
+                    "Product 62",
+                    "SKU00062"
+                ],
+                [
+                    66,
+                    "Product 66",
+                    "SKU00066"
+                ],
+                [
+                    68,
+                    "Product 68",
+                    "SKU00068"
+                ],
+                [
+                    70,
+                    "Product 70",
+                    "SKU00070"
+                ],
+                [
+                    74,
+                    "Product 74",
+                    "SKU00074"
+                ],
+                [
+                    80,
+                    "Product 80",
+                    "SKU00080"
+                ],
+                [
+                    89,
+                    "Product 89",
+                    "SKU00089"
+                ],
+                [
+                    90,
+                    "Product 90",
+                    "SKU00090"
+                ],
+                [
+                    94,
+                    "Product 94",
+                    "SKU00094"
+                ],
+                [
+                    99,
+                    "Product 99",
+                    "SKU00099"
+                ],
+                [
+                    115,
+                    "Product 115",
+                    "SKU00115"
+                ],
+                [
+                    119,
+                    "Product 119",
+                    "SKU00119"
+                ],
+                [
+                    121,
+                    "Product 121",
+                    "SKU00121"
+                ],
+                [
+                    125,
+                    "Product 125",
+                    "SKU00125"
+                ],
+                [
+                    129,
+                    "Product 129",
+                    "SKU00129"
+                ],
+                [
+                    146,
+                    "Product 146",
+                    "SKU00146"
+                ],
+                [
+                    149,
+                    "Product 149",
+                    "SKU00149"
+                ],
+                [
+                    150,
+                    "Product 150",
+                    "SKU00150"
+                ],
+                [
+                    152,
+                    "Product 152",
+                    "SKU00152"
+                ],
+                [
+                    160,
+                    "Product 160",
+                    "SKU00160"
+                ],
+                [
+                    161,
+                    "Product 161",
+                    "SKU00161"
+                ],
+                [
+                    163,
+                    "Product 163",
+                    "SKU00163"
+                ],
+                [
+                    167,
+                    "Product 167",
+                    "SKU00167"
+                ],
+                [
+                    168,
+                    "Product 168",
+                    "SKU00168"
+                ],
+                [
+                    169,
+                    "Product 169",
+                    "SKU00169"
+                ],
+                [
+                    184,
+                    "Product 184",
+                    "SKU00184"
+                ],
+                [
+                    185,
+                    "Product 185",
+                    "SKU00185"
+                ],
+                [
+                    191,
+                    "Product 191",
+                    "SKU00191"
+                ],
+                [
+                    192,
+                    "Product 192",
+                    "SKU00192"
+                ],
+                [
+                    197,
+                    "Product 197",
+                    "SKU00197"
+                ],
+                [
+                    198,
+                    "Product 198",
+                    "SKU00198"
+                ]
+            ]
+        },
+        "summary_never_sold": "The query identified 40 products that have never been sold. These products include \"Product 2\" (SKU00002), \"Product 9\" (SKU00009), and \"Product 10\" (SKU00010), among others.",
+        "final_report_never_sold": "A total of 40 products have never been sold. These include: Product 2 (SKU00002), Product 9 (SKU00009), Product 10 (SKU00010), and others."
+    },
+    "executed_queries": [
+        "SELECT id, name, sku FROM products WHERE id NOT IN (SELECT product_id FROM order_items);"
+    ],
+    "node_status": {
+        "n1": {
+            "state": "succeeded",
+            "attempts": 1,
+            "last_error": null
+        },
+        "n2": {
+            "state": "succeeded",
+            "attempts": 1,
+            "last_error": null
+        },
+        "n3": {
+            "state": "succeeded",
+            "attempts": 1,
+            "last_error": null
+        }
+    },
+    "current_node_id": "n3",
+    "last_output": {
+        "status": "ok",
+        "artifacts": {
+            "final_report_never_sold": "A total of 40 products have never been sold. These include: Product 2 (SKU00002), Product 9 (SKU00009), Product 10 (SKU00010), and others."
+        },
+        "notes": "Generated the final report based on the summary_never_sold artifact, listing the products that have never been sold as requested."
+    },
+}

@@ -1,0 +1,4 @@
+- In the workflow, generated queries are executed and their results are passed into the next step, which could be another query or an analysis process. A key consideration is handling cases where the query output is extremely large.
+- Retry mechanism in each step?
+- Retry mechanism the whole loop (planner) -> improvement?
+- 

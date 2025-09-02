@@ -3,3 +3,4 @@ google-genai
 python-dotenv
 langchain[google-genai]
 langgraph
+faker

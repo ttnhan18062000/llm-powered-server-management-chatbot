@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, END
 from pydantic.json import pydantic_encoder
 import json
 import os
+from pathlib import Path
 
 from models import GraphState
 from nodes import (
@@ -44,11 +45,22 @@ def build_graph():
 
 
 def run_workflow(
-    user_request: str, general_context: str, schema_snapshot: str, example_queries: str
+    user_request: str,
+    general_context: str,
+    schema_snapshot: str,
+    example_queries: str,
+    id=None,
 ):
     """Initializes and runs the workflow, returning the final state."""
+    if id:
+        output_dir = Path(f"output/test/{id}")
+    else:
+        output_dir = Path(f"output/tmp")
+    os.makedirs(output_dir, exist_ok=True)
+
     graph = build_graph()
     initial_state = GraphState(
+        output_dir=output_dir,
         user_request=user_request,
         general_context=general_context,
         schema_snapshot=schema_snapshot,
@@ -64,8 +76,8 @@ def run_workflow(
     final_state_value = list(final_state.values())[-1]
 
     # Save the final state for debugging
-    os.makedirs("output", exist_ok=True)
-    with open("output/final_state.json", "w") as f:
+    final_output_path = output_dir / "final_state.json"
+    with final_output_path.open("w", encoding="utf-8") as f:
         json.dump(final_state_value, f, indent=2, default=pydantic_encoder)
 
     return final_state_value
