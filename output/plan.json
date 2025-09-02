@@ -2,66 +2,62 @@
   "version": "1.0",
   "nodes": [
     {
-      "id": "n1_get_delayed_shipments_data",
+      "id": "n1_get_user_id",
       "type": "SQL",
-      "label": "Retrieve raw data on delayed shipments per supplier",
+      "label": "Retrieve User ID",
       "requires": "",
-      "produces": "result_delayed_shipments_raw",
-      "input": "Generate a SQL query to retrieve the following for each supplier for shipments in the last year (ship_date within the last year): supplier_id, supplier_name, total_shipments_count (total unique shipments linked to the supplier), delayed_shipments_count (total unique delayed shipments linked to the supplier, where delivered_date > expected_date), delayed_warehouses_names (comma-separated list of unique warehouse names involved in delayed shipments for that supplier), and delayed_customer_ids_list (comma-separated list of customer IDs involved in delayed shipments for that supplier, including duplicates for frequency counting). This query will join shipments, orders, order_items, products, purchase_order_items, purchase_orders, suppliers, and warehouses tables. Ensure ship_date is within the last year from CURRENT_DATE."
+      "produces": "result_user_id",
+      "input": "Retrieve the 'id' from the 'users' table for the specified 'username'. The username will be provided at runtime."
     },
     {
-      "id": "n2_analyze_delayed_shipments",
+      "id": "n2_analyze_user_id",
       "type": "SQL_RESULT_ANALYZER",
-      "label": "Process delayed shipment data and identify top customers",
-      "requires": "result_delayed_shipments_raw",
-      "produces": "summary_delayed_shipments_processed",
-      "input": "Process the SQL query results from 'result_delayed_shipments_raw'. For each supplier, calculate the percentage of delayed shipments (delayed_shipments_count / total_shipments_count * 100). Parse the 'delayed_customer_ids_list' to determine the top 3 most affected customer IDs by counting the frequency of each customer ID. The output should be a structured object (e.g., JSON array) where each element represents a supplier and includes: supplier_id, supplier_name, delayed_shipments_count, percentage_delayed_shipments, delayed_warehouses_names, and a list of the top 3 customer IDs (e.g., [customer_id_1, customer_id_2, customer_id_3])."
+      "label": "Extract User ID",
+      "requires": "result_user_id",
+      "produces": "summary_user_id",
+      "input": "From the 'result_user_id' table, extract the 'id' value, which represents the user_id. This user_id will be used in subsequent queries."
     },
     {
-      "id": "n3_get_customer_names",
+      "id": "n3_get_high_impact_actions",
       "type": "SQL",
-      "label": "Retrieve names for identified top customers",
-      "requires": "summary_delayed_shipments_processed",
-      "produces": "result_customer_names_raw",
-      "input": "Extract all unique customer IDs from the 'summary_delayed_shipments_processed' artifact. Generate a SQL query to retrieve the 'id' and 'name' for these specific customer IDs from the 'customers' table. The query should return two columns: customer_id and customer_name."
+      "label": "Query High-Impact Actions",
+      "requires": "summary_user_id",
+      "produces": "result_high_impact_actions",
+      "input": "Using the 'user_id' from 'summary_user_id', query the 'user_actions' table.\n1. Find actions where 'target_table' is 'orders' and join with the 'orders' table to filter for 'status' = 'cancelled'. Include order details.\n2. Find actions where 'target_table' is 'stock_movements' and join with the 'stock_movements' table to filter for 'movement_type' = 'adjustment'. Include stock movement details (warehouse_id, product_id, quantity, notes).\nCombine these two sets of results into a single output, ensuring relevant details from 'orders' and 'stock_movements' tables are included for each action, such as action timestamp, details, order_id, status, product_id, warehouse_id, movement_type, quantity, notes.\nThe query should be designed to retrieve all necessary information for the final audit report."
     },
     {
-      "id": "n4_analyze_customer_names",
+      "id": "n4_analyze_high_impact_actions",
       "type": "SQL_RESULT_ANALYZER",
-      "label": "Map customer IDs to names",
-      "requires": "result_customer_names_raw",
-      "produces": "summary_customer_names",
-      "input": "Process the raw SQL results from 'result_customer_names_raw'. Create a mapping (e.g., a dictionary or JSON object) where keys are customer IDs and values are their corresponding customer names."
+      "label": "Summarize High-Impact Actions",
+      "requires": "result_high_impact_actions",
+      "produces": "summary_high_impact_actions",
+      "input": "Review the 'result_high_impact_actions'. For each action, identify if it's an order cancellation or a stock adjustment. Extract key information such as the action timestamp, the specific action details, the affected order ID and its status, or the affected stock movement's warehouse, product, type, and quantity. Structure this information into a concise summary that highlights the nature and impact of each high-impact action."
     },
     {
-      "id": "n5_format_final_output",
+      "id": "n5_present_audit",
       "type": "ANALYZER",
-      "label": "Generate final report of suppliers and delayed shipments",
-      "requires": "summary_delayed_shipments_processed,summary_customer_names",
-      "produces": "final_report",
-      "input": "Combine the information from 'summary_delayed_shipments_processed' and 'summary_customer_names'. For each supplier in 'summary_delayed_shipments_processed', replace the top 3 customer IDs with their corresponding names using the mapping from 'summary_customer_names'. Format the final output as a human-readable report (e.g., a markdown table or a clear list of entries) including the supplier's name, the number of delayed shipments, the percentage of delayed shipments, the warehouses that handled those delayed shipments, and the names of the top 3 most affected customers. Order the suppliers by the number of delayed shipments in descending order."
+      "label": "Present Audit Report",
+      "requires": "summary_high_impact_actions",
+      "produces": "audit_report",
+      "input": "Using the 'summary_high_impact_actions', consolidate and present a clear audit report.\nFor order cancellations: include the user_id, action timestamp, order_id, original order status, new status (cancelled), and any relevant details from the user_action.\nFor manual stock adjustments: include the user_id, action timestamp, stock_movement_id, warehouse_id, product_id, movement_type (adjustment), quantity changed, and notes from the stock_movement.\nEnsure the report is human-readable, highlights the user's high-impact actions, and provides sufficient detail for review."
     }
   ],
   "edges": [
     [
-      "n1_get_delayed_shipments_data",
-      "n2_analyze_delayed_shipments"
+      "n1_get_user_id",
+      "n2_analyze_user_id"
     ],
     [
-      "n2_analyze_delayed_shipments",
-      "n3_get_customer_names"
+      "n2_analyze_user_id",
+      "n3_get_high_impact_actions"
     ],
     [
-      "n3_get_customer_names",
-      "n4_analyze_customer_names"
+      "n3_get_high_impact_actions",
+      "n4_analyze_high_impact_actions"
     ],
     [
-      "n2_analyze_delayed_shipments",
-      "n5_format_final_output"
-    ],
-    [
-      "n4_analyze_customer_names",
-      "n5_format_final_output"
+      "n4_analyze_high_impact_actions",
+      "n5_present_audit"
     ]
   ]
 }

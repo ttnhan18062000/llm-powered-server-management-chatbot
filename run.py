@@ -48,14 +48,14 @@ def main():
     os.environ["SQLITE_DB_PATH"] = args.db
 
     # 2. Load General Context
-    with open("descriptions.txt", "r") as f:
+    with open("data/descriptions.txt", "r") as f:
         general_context = f.read()
 
     # 3. Load Schema for LLM Context
     with open(args.schema, "r") as f:
         schema_text = f.read()
 
-    with open("examples.sql", "r") as f:
+    with open("data/examples.sql", "r") as f:
         example_queries = f.read()
 
     # 4. Get User Request
@@ -105,3 +105,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python run.py --db data/logistics.db --schema data/db.sql --request "Audit a specific user's recent actions, such as order cancellations or manual stock adjustments, to review high-impact changes."

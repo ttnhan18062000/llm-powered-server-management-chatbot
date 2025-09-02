@@ -44,7 +44,6 @@ class AnalyzerOutput(BaseModel):
 
 class SQLNodeOutput(BaseModel):
     sql: str
-    parameters: Dict[str, Any] = Field(default_factory=dict)
     notes: Optional[str] = ""
 
 
